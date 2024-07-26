@@ -36,6 +36,8 @@
 
 #if !HAVE_MALLOC
 #undef malloc
+void *malloc();
+
 void *
 rpl_malloc(size_t n)
 {
@@ -48,6 +50,8 @@ rpl_malloc(size_t n)
 
 #if !HAVE_REALLOC
 #undef realloc
+void *realloc();
+
 void *
 rpl_realloc(void *p, size_t n)
 {
