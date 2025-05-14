@@ -32,6 +32,7 @@
 # include <inttypes.h>
 #endif  /* HAVE_INTTYPES_H */
 
+#include <math.h>
 #include <sixel.h>
 #include "output.h"
 
@@ -100,71 +101,88 @@ typedef struct parser_context {
 } parser_context_t;
 
 
-/*
- * Primary color hues:
- *  blue:    0 degrees
- *  red:   120 degrees
- *  green: 240 degrees
- */
-static int
-hls_to_rgb(int hue, int lum, int sat)
-{
-    double min, max;
-    int r, g, b;
 
-    if (sat == 0) {
-        r = g = b = lum;
-    }
+// From https://github.com/galatolofederico/st-sixel/blob/master/sixel_hls.c
+int
+hls_to_rgb(int hue, int lum, int sat);
+int hls_to_rgb(int hue, int lum, int sat) {
+  double hs = (hue + 240) % 360;
+  double hv = hs / 360.0;
+  double lv = lum / 100.0;
+  double sv = sat / 100.0;
+  double c, x, m, c2;
+  double r1, g1, b1;
+  int r, g, b;
+  int hpi;
 
-    /* https://wikimedia.org/api/rest_v1/media/math/render/svg/17e876f7e3260ea7fed73f69e19c71eb715dd09d */
-    max = lum + sat * (1.0 - (lum > 50 ? (((lum << 2) / 100.0) - 1.0): - (2 * (lum / 100.0) - 1.0))) / 2.0;
+  if (sat == 0) {
+    r = g = b = lum * 255 / 100;
+    return SIXEL_RGB(r, g, b);
+  }
 
-    /* https://wikimedia.org/api/rest_v1/media/math/render/svg/f6721b57985ad83db3d5b800dc38c9980eedde1d */
-    min = lum - sat * (1.0 - (lum > 50 ? (((lum << 2) / 100.0) - 1.0): - (2 * (lum / 100.0) - 1.0))) / 2.0;
+  if ((c2 = ((2.0 * lv) - 1.0)) < 0.0) {
+    c2 = -c2;
+  }
+  c = (1.0 - c2) * sv;
+  hpi = (int) (hv * 6.0);
+  x = (hpi & 1) ? c : 0.0;
+  m = lv - 0.5 * c;
 
-    /* sixel hue color ring is roteted -120 degree from nowdays general one. */
-    hue = (hue + 240) % 360;
+  switch (hpi) {
+  case 0:
+    r1 = c;
+    g1 = x;
+    b1 = 0.0;
+    break;
+  case 1:
+    r1 = x;
+    g1 = c;
+    b1 = 0.0;
+    break;
+  case 2:
+    r1 = 0.0;
+    g1 = c;
+    b1 = x;
+    break;
+  case 3:
+    r1 = 0.0;
+    g1 = x;
+    b1 = c;
+    break;
+  case 4:
+    r1 = x;
+    g1 = 0.0;
+    b1 = c;
+    break;
+  case 5:
+    r1 = c;
+    g1 = 0.0;
+    b1 = x;
+    break;
+  default:
+    return SIXEL_RGB(255, 255, 255);
+  }
 
-    /* https://wikimedia.org/api/rest_v1/media/math/render/svg/937e8abdab308a22ff99de24d645ec9e70f1e384 */
-    switch (hue / 60) {
-    case 0:  /* 0 <= hue < 60 */
-        r = max;
-        g = (min + (max - min) * (hue / 60.0));
-        b = min;
-        break;
-    case 1:  /* 60 <= hue < 120 */
-        r = min + (max - min) * ((120 - hue) / 60.0);
-        g = max;
-        b = min;
-        break;
-    case 2:  /* 120 <= hue < 180 */
-        r = min;
-        g = max;
-        b = (min + (max - min) * ((hue - 120) / 60.0));
-        break;
-    case 3:  /* 180 <= hue < 240 */
-        r = min;
-        g = (min + (max - min) * ((240 - hue) / 60.0));
-        b = max;
-        break;
-    case 4:  /* 240 <= hue < 300 */
-        r = (min + (max - min) * ((hue - 240) / 60.0));
-        g = min;
-        b = max;
-        break;
-    case 5:  /* 300 <= hue < 360 */
-        r = max;
-        g = min;
-        b = (min + (max - min) * ((360 - hue) / 60.0));
-        break;
-    default:
-#if HAVE___BUILTIN_UNREACHABLE
-        __builtin_unreachable();
-#endif
-        break;
-    }
+  r = (int) ((r1 + m) * 100.0 + 0.5);
+  g = (int) ((g1 + m) * 100.0 + 0.5);
+  b = (int) ((b1 + m) * 100.0 + 0.5);
 
-    return SIXEL_XRGB(r, g, b);
+  if (r < 0) {
+    r = 0;
+  } else if (r > 100) {
+    r = 100;
+  }
+  if (g < 0) {
+    g = 0;
+  } else if (g > 100) {
+    g = 100;
+  }
+  if (b < 0) {
+    b = 0;
+  } else if (b > 100) {
+    b = 100;
+  }
+  return SIXEL_RGB(r * 255 / 100, g * 255 / 100, b * 255 / 100);
 }
 
 
